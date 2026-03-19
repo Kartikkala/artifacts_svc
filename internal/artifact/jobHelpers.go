@@ -165,7 +165,7 @@ func (svc *Service) videoWorker(
 		}
 		err = svc.NATS.Publish("artifact.fail", []byte(job.NodeID.String()))
 		if err != nil {
-			log.Println("error in video worker (DB to set Job fail status): ", err)
+			log.Println("error in video worker (NATS): ", err)
 		}
 		return
 	}
@@ -175,10 +175,6 @@ func (svc *Service) videoWorker(
 		// TODO send this progress to the frontend!
 		log.Printf("Current progress of worker %v: %v\n", WorkerID, percent)
 	})
-
-	// TODO 0. Send the video metadata to sidecar
-	// so that it can send it to main storage
-	// server
 
 	// TODO 1. Add option to cancel the video
 	// conversion and revert the changes
@@ -190,7 +186,35 @@ func (svc *Service) videoWorker(
 		log.Println("error in video worker: (ffmpeg)", err)
 		err = svc.setJobStatusFailed(ctx, job)
 
-		svc.NATS.Publish("artifact.success", []byte(job.NodeID.String()))
+		if err != nil {
+			log.Println("error in video worker (DB to set Job fail status): ", err)
+		}
+
+		err = svc.NATS.Publish("artifact.fail", []byte(job.NodeID.String()))
+		if err != nil {
+			log.Println("error in video worker (NATS): ", err)
+		}
+		return
+	}
+
+	metadataString, err := json.Marshal(vm)
+	if err != nil {
+		log.Printf("error in marshalling video metadata: %s\n", err.Error())
+		err = svc.NATS.Publish("artifact.fail", []byte(job.NodeID.String()))
+		if err != nil {
+			log.Println("error in video worker (NATS): ", err)
+		}
+		return
+	}
+
+	payload, err := json.Marshal(map[string][]byte{
+		"node_id":  []byte(job.NodeID.String()),
+		"metadata": metadataString,
+	})
+
+	err = svc.NATS.Publish("artifact.success", payload)
+	if err != nil {
+		log.Println("error in video worker (NATS): ", err)
 		return
 	}
 
