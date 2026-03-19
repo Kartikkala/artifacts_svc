@@ -80,6 +80,9 @@ func (svc *Service) BuildffmpegArgs(
 	videoHeightLevels := buildResolutionHeightLadder(maxResHeight, 3)
 	args := []string{
 		"-y",
+		"-reconnect", "1",
+		"-reconnect_streamed", "1",
+		"-reconnect_delay_max", "10",
 	}
 
 	if svc.VideoEncoder == "h264_nvenc" {
@@ -93,7 +96,9 @@ func (svc *Service) BuildffmpegArgs(
 			"-hwaccel_output_format", "qsv",
 		)
 	}
-
+	args = append(args,
+		"-rw_timeout", "30000000", // 30s timeout
+	)
 	args = append(args,
 		"-i", filePath,
 		"-filter_complex", svc.buildFilterComplex(videoHeightLevels),
@@ -124,7 +129,7 @@ func (svc *Service) BuildffmpegArgs(
 		"-hls_time", "6",
 		"-hls_playlist_type", "vod",
 		"-master_pl_name", "master.m3u8",
-		"-method", "PUT", 
+		"-method", "PUT",
 		"-http_persistent", "1", // Keep connection alive for speed
 		"-hls_segment_filename", fmt.Sprintf("%s/%%v/segment_%%03d.ts", proxyEndpoint),
 	)
