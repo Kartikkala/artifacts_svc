@@ -144,6 +144,7 @@ func (svc *Service) setJobStatusFailed(
 	ctx context.Context,
 	job *VideoProcessingJob,
 ) error {
+	ctx = context.WithoutCancel(ctx)
 	if err := svc.DB.WithContext(ctx).
 		Model(&VideoProcessingJob{}).
 		Where("node_id = ?", job.NodeID).
