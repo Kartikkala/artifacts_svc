@@ -12,14 +12,21 @@ type DatabaseConfig struct {
 	Port     uint16
 	Timezone string
 }
+type AppConfig struct {
+	WorkerInactivityKillDurationSecs uint16
+}
 
 type Config struct {
-	Database DatabaseConfig
+	App      *AppConfig
+	Database *DatabaseConfig
 }
 
 func NewConfig() *Config {
 	return &Config{
-		Database: DatabaseConfig{
+		App: &AppConfig{
+			WorkerInactivityKillDurationSecs: 30,
+		},
+		Database: &DatabaseConfig{
 			User:     os.Getenv("POSTGRES_USER"),
 			Password: os.Getenv("POSTGRES_PASS"),
 			DBName:   os.Getenv("POSTGRES_DBNAME"),

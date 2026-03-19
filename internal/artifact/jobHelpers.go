@@ -15,12 +15,13 @@ import (
 
 func (svc *Service) StartWorkers(
 	ctx context.Context,
+	inactivityTimeoutSecs uint16,
 ) {
 	go svc.jobProducer(ctx)
 	var i uint8 = 0
 	// Start n workers
 	for i = 0; i < svc.MaxWorkers; i++ {
-		go svc.runVideoWorker(ctx, i)
+		go svc.runVideoWorker(ctx, i, inactivityTimeoutSecs)
 	}
 
 	// Throw in n tokens in the channel so that
@@ -94,6 +95,7 @@ func (svc *Service) registerVideoJob(
 func (svc *Service) runVideoWorker(
 	ctx context.Context,
 	WorkerID uint8,
+	inactivityTimeoutSecs uint16,
 ) {
 	for {
 		<-svc.WorkerSemaphore
@@ -133,7 +135,7 @@ func (svc *Service) runVideoWorker(
 			}
 
 			// Send that new job to video worker
-			svc.videoWorker(ctx, &videoProcessingJob, WorkerID)
+			svc.videoWorker(ctx, &videoProcessingJob, WorkerID, inactivityTimeoutSecs)
 		}
 	}
 }
@@ -155,6 +157,7 @@ func (svc *Service) videoWorker(
 	ctx context.Context,
 	job *VideoProcessingJob,
 	WorkerID uint8,
+	inactivityTimeoutSecs uint16,
 ) {
 	vm, err := svc.ffprobe(ctx, job.URL)
 	if err != nil {
@@ -171,10 +174,46 @@ func (svc *Service) videoWorker(
 	}
 
 	upstreamURL := fmt.Sprintf("http://127.0.0.1:9009/hls/%s", job.NodeID.String())
+
+	progressCh := make(chan struct{}, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		timeout := time.Duration(inactivityTimeoutSecs) * time.Second
+		timer := time.NewTimer(timeout)
+
+		for {
+			select {
+			case <-progressCh:
+				if !timer.Stop() {
+					<-timer.C
+				}
+				timer.Reset(timeout)
+
+			case <-timer.C:
+				log.Println("No progress detected, killing ffmpeg")
+				cancel()
+				return
+
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	err = svc.ffmpeg(ctx, job.URL, upstreamURL, vm.Duration, vm.Height, func(percent float64) {
 		// TODO send this progress to the frontend!
+		select {
+		case progressCh <- struct{}{}:
+		default:
+		}
 		log.Printf("Current progress of worker %v: %v\n", WorkerID, percent)
 	})
+
+	// TODO 0. Set job fail in DB after ctx
+	// is cancelled
 
 	// TODO 1. Add option to cancel the video
 	// conversion and revert the changes
