@@ -160,7 +160,13 @@ func (svc *Service) videoWorker(
 	if err != nil {
 		log.Println("error in video worker: (ffprobe)", err)
 		err = svc.setJobStatusFailed(ctx, job)
-		// svc.NewJobEventBroker.Publish("job.completed", job)
+		if err != nil {
+			log.Println("error in video worker (DB to set Job fail status): ", err)
+		}
+		err = svc.NATS.Publish("artifact.fail", []byte(job.NodeID.String()))
+		if err != nil {
+			log.Println("error in video worker (DB to set Job fail status): ", err)
+		}
 		return
 	}
 
@@ -183,7 +189,8 @@ func (svc *Service) videoWorker(
 	if err != nil {
 		log.Println("error in video worker: (ffmpeg)", err)
 		err = svc.setJobStatusFailed(ctx, job)
-		// svc.NewJobEventBroker.Publish("job.completed", job)
+
+		svc.NATS.Publish("artifact.success", []byte(job.NodeID.String()))
 		return
 	}
 
