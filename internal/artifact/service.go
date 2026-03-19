@@ -15,7 +15,6 @@ func NewService(
 	encoder := encoderForVendor(DetectGPUVendor())
 
 	log.Println("Selected encoder : ", encoder)
-	DB.AutoMigrate(&VideoArtifact{})
 	DB.AutoMigrate(&VideoProcessingJob{})
 	return &Service{
 		DB:              DB,

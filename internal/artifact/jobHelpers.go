@@ -6,9 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -159,30 +156,23 @@ func (svc *Service) videoWorker(
 	job *VideoProcessingJob,
 	WorkerID uint8,
 ) {
-	filePath, err := svc.downloadFile(ctx, job, WorkerID)
-	log.Println("filepath recieved: ", filePath)
-	if err != nil {
-		log.Println("error in video worker (downloading file):", err)
-		err = svc.setJobStatusFailed(ctx, job)
-		// svc.NewJobEventBroker.Publish("job.completed", job)
-		return
-	}
-	vm, err := svc.ffprobe(ctx, filePath)
-
+	vm, err := svc.ffprobe(ctx, job.URL)
 	if err != nil {
 		log.Println("error in video worker: (ffprobe)", err)
-		os.Remove(filePath)
 		err = svc.setJobStatusFailed(ctx, job)
 		// svc.NewJobEventBroker.Publish("job.completed", job)
 		return
 	}
-	filename := filepath.Base(filePath)
-	baseName := strings.TrimSuffix(filename, filepath.Ext(filename))
-	outputDir := fmt.Sprintf("videos/%v", baseName)
-	err = svc.ffmpeg(ctx, filePath, outputDir, vm.Duration, vm.Height, func(percent float64) {
+
+	upstreamURL := fmt.Sprintf("http://127.0.0.1:9009/hls/%s", job.NodeID.String())
+	err = svc.ffmpeg(ctx, job.URL, upstreamURL, vm.Duration, vm.Height, func(percent float64) {
 		// TODO send this progress to the frontend!
 		log.Printf("Current progress of worker %v: %v\n", WorkerID, percent)
 	})
+
+	// TODO 0. Send the video metadata to sidecar
+	// so that it can send it to main storage
+	// server
 
 	// TODO 1. Add option to cancel the video
 	// conversion and revert the changes
@@ -197,48 +187,8 @@ func (svc *Service) videoWorker(
 		return
 	}
 
-	key := uuid.New().String()
-
-	log.Printf("Worker %v uploading HLS to storage...\n", WorkerID)
-
-	// err = svc.StorageSvc.PutHLS(ctx, outputDir, key)
-
-	if err != nil {
-		log.Println("error in video worker: (put HLS)", err)
-		err = svc.setJobStatusFailed(ctx, job)
-		// svc.NewJobEventBroker.Publish("job.completed", job)
-		os.RemoveAll(outputDir)
-		return
+	if err := svc.DB.WithContext(ctx).Delete(&VideoProcessingJob{NodeID: job.NodeID}).Error; err != nil {
+		log.Printf("error in video job deletion: %s\n", err.Error())
 	}
-	artifactSize, err := calculateFolderSize(outputDir)
-	if err != nil {
-		log.Println("error in video worker: (artifact size Calc)", err)
-	}
-	os.Remove(filePath)
-	os.RemoveAll(outputDir)
-
-	videoArtifact := &VideoArtifact{
-		ID:             uuid.New(),
-		NodeID:         &job.NodeID,
-		Key:            &key,
-		SizeBytes:      &artifactSize,
-		LastAccessedAt: time.Now(),
-		Metadata:       vm,
-	}
-
-	err = svc.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(videoArtifact).Error; err != nil {
-			return err
-		}
-		if err := tx.Delete(&VideoProcessingJob{NodeID: job.NodeID}).Error; err != nil {
-			return err
-		}
-		return nil
-	})
-
-	if err != nil {
-		log.Println("error in video worker(video artifact creation): ", err)
-	}
-	// svc.NewJobEventBroker.Publish("job.completed", job)
 
 }

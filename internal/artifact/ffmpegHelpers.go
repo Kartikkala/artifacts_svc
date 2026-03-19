@@ -2,7 +2,6 @@ package artifact
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 )
 
@@ -74,7 +73,7 @@ func getResolutionHeightBitrate(resolutionHeight int) string {
 
 func (svc *Service) BuildffmpegArgs(
 	filePath,
-	outputDir string,
+	proxyEndpoint string,
 	duration float64,
 	maxResHeight int,
 ) []string {
@@ -125,7 +124,9 @@ func (svc *Service) BuildffmpegArgs(
 		"-hls_time", "6",
 		"-hls_playlist_type", "vod",
 		"-master_pl_name", "master.m3u8",
-		"-hls_segment_filename", filepath.Join(outputDir, "%v/segment_%03d.ts"),
+		"-method", "PUT", 
+		"-http_persistent", "1", // Keep connection alive for speed
+		"-hls_segment_filename", fmt.Sprintf("%s/%%v/segment_%%03d.ts", proxyEndpoint),
 	)
 	// var_stream_map
 	var maps []string
@@ -135,7 +136,7 @@ func (svc *Service) BuildffmpegArgs(
 
 	args = append(args,
 		"-var_stream_map", strings.Join(maps, " "),
-		filepath.Join(outputDir, "%v/index.m3u8"),
+		fmt.Sprintf("%s/%%v/index.m3u8", proxyEndpoint),
 	)
 	return args
 }

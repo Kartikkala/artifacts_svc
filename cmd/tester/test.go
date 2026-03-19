@@ -8,34 +8,22 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// We just recreate the struct here to serialize it easily
-type VideoJob struct {
-	NodeID string `json:"node_id"`
-	URL    string `json:"url"`
+type VideoProcessingJob struct {
+	NodeID uuid.UUID `json:"node_id"`
+	URL    string    `json:"url"`
 }
 
 func main() {
-	// 1. Connect to your local NATS server
-	nc, err := nats.Connect(nats.DefaultURL)
-	if err != nil {
-		log.Fatal(err)
-	}
+	nc, _ := nats.Connect(nats.DefaultURL)
 	defer nc.Close()
 
-	// 2. Create a perfectly valid dummy payload
-	// Using a reliable public test MP4 (15MB)
-	job := VideoJob{
-		NodeID: uuid.New().String(),
-		URL:    "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+	dummyJob := VideoProcessingJob{
+		NodeID: uuid.New(),
+		URL:    "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
 	}
+	jobBytes, _ := json.Marshal(dummyJob)
 
-	payload, _ := json.Marshal(job)
-
-	// 3. Fire the payload into the void!
-	err = nc.Publish("video", payload)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("Successfully published test job!\nUUID: %s\n", job.NodeID)
+	log.Println("Firing dummy job into queue...")
+	// Make sure this string matches your worker's queue subject!
+	nc.Publish("video", jobBytes)
 }
