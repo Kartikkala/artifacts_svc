@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -60,10 +59,6 @@ func (svc *Service) ffmpeg(
 	maxResHeight int,
 	progress func(percent float64),
 ) error {
-
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return err
-	}
 
 	cmd := exec.CommandContext(
 		ctx,
