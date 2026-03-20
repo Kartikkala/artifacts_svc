@@ -2,6 +2,8 @@ package config
 
 import (
 	"os"
+
+	"github.com/sirkartik/artifacts_svc/internal/utils"
 )
 
 type DatabaseConfig struct {
@@ -14,6 +16,10 @@ type DatabaseConfig struct {
 }
 type AppConfig struct {
 	WorkerInactivityKillDurationSecs uint16
+	ArtifactUpstreamAddress          string
+	ArtifactUpstreamPort             uint16
+	ArtifactUpstreamProtocol         utils.Protocol
+	ArtifactUpstreamEndpoint         string
 }
 
 type Config struct {
@@ -25,6 +31,10 @@ func NewConfig() *Config {
 	return &Config{
 		App: &AppConfig{
 			WorkerInactivityKillDurationSecs: 30,
+			ArtifactUpstreamAddress:          "127.0.0.1",
+			ArtifactUpstreamEndpoint:         "/hls",
+			ArtifactUpstreamPort:             9009,
+			ArtifactUpstreamProtocol:         utils.HTTP,
 		},
 		Database: &DatabaseConfig{
 			User:     os.Getenv("POSTGRES_USER"),

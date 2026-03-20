@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,13 +16,14 @@ import (
 
 func (svc *Service) StartWorkers(
 	ctx context.Context,
+	artifactUpstreamURL *url.URL,
 	inactivityTimeoutSecs uint16,
 ) {
 	go svc.jobProducer(ctx)
 	var i uint8 = 0
 	// Start n workers
 	for i = 0; i < svc.MaxWorkers; i++ {
-		go svc.runVideoWorker(ctx, i, inactivityTimeoutSecs)
+		go svc.runVideoWorker(ctx, i, artifactUpstreamURL, inactivityTimeoutSecs)
 	}
 
 	// Throw in n tokens in the channel so that
@@ -95,6 +97,7 @@ func (svc *Service) registerVideoJob(
 func (svc *Service) runVideoWorker(
 	ctx context.Context,
 	WorkerID uint8,
+	artifactUpstreamURL *url.URL,
 	inactivityTimeoutSecs uint16,
 ) {
 	for {
@@ -135,7 +138,7 @@ func (svc *Service) runVideoWorker(
 			}
 
 			// Send that new job to video worker
-			svc.videoWorker(ctx, &videoProcessingJob, WorkerID, inactivityTimeoutSecs)
+			svc.videoWorker(ctx, &videoProcessingJob, WorkerID, artifactUpstreamURL, inactivityTimeoutSecs)
 		}
 	}
 }
@@ -158,6 +161,7 @@ func (svc *Service) videoWorker(
 	ctx context.Context,
 	job *VideoProcessingJob,
 	WorkerID uint8,
+	artifactUpstreamURL *url.URL,
 	inactivityTimeoutSecs uint16,
 ) {
 	vm, err := svc.ffprobe(ctx, job.URL)
@@ -174,7 +178,7 @@ func (svc *Service) videoWorker(
 		return
 	}
 
-	upstreamURL := fmt.Sprintf("http://127.0.0.1:9009/hls/%s", job.NodeID.String())
+	upstreamURL := fmt.Sprintf("%s/%s", artifactUpstreamURL.String(), job.NodeID.String())
 
 	progressCh := make(chan struct{}, 1)
 
